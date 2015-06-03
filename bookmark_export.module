@@ -1,0 +1,156 @@
+<?php
+/**
+ * @file
+ * Module for exporting user bookmarks into csv file format.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function bookmark_export_menu() {
+  $menu = array();
+
+  $menu['admin/config/content/bookmarks'] = array(
+    'title' => 'Bookmarks export',
+    'description' => 'Export user bookmarks to local storage.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('bookmark_export_admin_form'),
+    'access arguments' => array('manage bookmarks export'),
+    'file' => 'bookmark_export.admin.inc',
+  );
+
+  return $menu;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function bookmark_export_permission() {
+  $perm = array();
+
+  $perm['manage bookmarks export'] = array(
+    'title' => t('Manage bookmarks export'),
+    'description' => t('Allow certain roles to handle bookmarks export'),
+  );
+
+  return $perm;
+}
+
+/**
+ * Fetch bookmarks for all users, if any.
+ *
+ * @param boolean $reset
+ *   Force to ignore the static cache.
+ * @return array $bookmarks
+ *   Set of user specific data with bookmarks ids.
+ */
+function bookmark_export_get_bookmarks($reset = FALSE) {
+  $bookmarks = &drupal_static(__FUNCTION__, array());
+
+  if (empty($bookmarks) || $reset) {
+    $query = db_select('users', 'u');
+    $query->join('flag_content', 'f', 'u.uid = f.uid');
+    $query->join('ting_object', 't', 'f.content_id = t.tid');
+    $query->fields('u', array('uid', 'mail'));
+    $query->fields('t', array('ding_entity_id'));
+    $query->condition('u.mail', '', '<>');
+    $query->orderBy('u.uid', 'ASC');
+    $result = $query
+      ->execute()
+      ->fetchAll();
+
+    $bookmarks = array();
+    foreach ($result as $row) {
+      $hash = md5($row->uid . $row->mail);
+      $bookmarks[$hash]['uid'] = $row->uid;
+      $bookmarks[$hash]['mail'] = $row->mail;
+      $bookmarks[$hash]['bookmarks'][] = $row->ding_entity_id;
+    }
+  }
+
+  return $bookmarks;
+}
+
+/**
+ * Generate csv file with the id's provided.
+ *
+ * @param string $filename
+ *   Target file name.
+ * @param array $ids
+ *   Array of id's to be put into the csv file.
+ *
+ * @return boolean
+ *   Indicates whether the csv file creation succeeded.
+ */
+function bookmark_export_create_csv($filename, $ids) {
+  $dir_name = dirname($filename);
+
+  if (!file_prepare_directory($dir_name, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+    watchdog('bookmark_export', 'Target directory could not be accessed - @dir', array('@dir' => $dir_name), WATCHDOG_WARNING);
+    return FALSE;
+  }
+
+  $handle = fopen($filename, 'w');
+
+  if (!$handle) {
+    watchdog('bookmark_export', 'Target file could not be created - @file', array('@file' => $filename), WATCHDOG_WARNING);
+    return FALSE;
+  }
+
+  foreach ($ids as $id) {
+    $tmp = array('pid', $id);
+    fputcsv($handle, $tmp);
+  }
+
+  fclose($handle);
+
+  return TRUE;
+}
+
+/**
+ * Entry point for the batch.
+ *
+ * @param string $filename
+ *   Path to resulting csv file.
+ * @param array $data
+ *   Contains user specific data, with bookmarked ids.
+ * @param array $context
+ *   Batch state.
+ */
+function bookmark_export_batch_start($filename, $data, &$context) {
+  $status = bookmark_export_create_csv($filename, $data['bookmarks']);
+  if ($status) {
+    $context['results'][] = $filename;
+
+    if ($data['notify']) {
+      $to = $data['mail'];
+      $from = variable_get('site_mail', '');
+      $params = array(
+        'to' => $to,
+        'subject' => variable_get('site_name', '') . ' - Your bookmarks',
+        'body' => $data['message'],
+      );
+
+      drupal_mail('bookmark_export', 'user_notification', $to, language_default(), $params, $from, TRUE);
+    }
+  }
+}
+
+/**
+ * Final callback when batch is finished.
+ *
+ * @param boolean $success
+ *   Indicates if the batch succeeded.
+ * @param array $results
+ *   User defined array of results gained during the batch.
+ * @param array $operations
+ *   Array of operations made.
+ */
+function bookmark_export_batch_finished($success, $results, $operations) {
+  if ($success) {
+    drupal_set_message(t('Exported bookmarks for @count users.', array('@count' => count($results))));
+  }
+  else {
+    drupal_set_message(t('The export operation did not succeed.'), 'error');
+  }
+}
