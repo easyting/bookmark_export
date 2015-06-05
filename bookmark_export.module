@@ -125,12 +125,12 @@ function bookmark_export_batch_start($filename, $data, &$context) {
     if ($data['notify']) {
       $to = $data['mail'];
       $from = variable_get('site_mail', '');
+      $site_name = variable_get('site_name', '');
       $params = array(
         'to' => $to,
-        'subject' => variable_get('site_name', '') . ' - Your bookmarks',
+        'subject' => 'Dine bogmærker fra det gamle ' . $site_name . ' website.',
         'body' => $data['message'],
       );
-
       drupal_mail('bookmark_export', 'user_notification', $to, language_default(), $params, $from, TRUE);
     }
   }
