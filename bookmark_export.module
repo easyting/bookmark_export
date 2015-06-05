@@ -122,7 +122,7 @@ function bookmark_export_batch_start($filename, $data, &$context) {
   if ($status) {
     $context['results'][] = $filename;
 
-    if ($data['notify']) {
+    if (isset($data['notify']) && $data['notify'] === TRUE) {
       $to = $data['mail'];
       $from = variable_get('site_mail', '');
       $site_name = variable_get('site_name', '');
