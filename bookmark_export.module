@@ -98,8 +98,11 @@ function bookmark_export_create_csv($filename, $ids) {
   }
 
   foreach ($ids as $id) {
-    $tmp = array('pid', $id);
-    fputcsv($handle, $tmp);
+    $faust = explode(':', $id);
+    if (isset($faust[1]) && !empty($faust[1])) {
+      $tmp = array('faust', $faust[1]);
+      fputcsv($handle, $tmp);
+    }
   }
 
   fclose($handle);
