@@ -128,14 +128,24 @@ function bookmark_export_batch_start($filename, $data, &$context) {
     if (isset($data['notify']) && $data['notify'] === TRUE) {
       $to = $data['mail'];
       $from = variable_get('site_mail', '');
-      $site_name = variable_get('site_name', '');
       $params = array(
-        'to' => $to,
-        'subject' => 'Dine bogmærker fra det gamle ' . $site_name . ' website.',
         'body' => $data['message'],
       );
       drupal_mail('bookmark_export', 'user_notification', $to, language_default(), $params, $from, TRUE);
     }
+  }
+}
+
+/**
+ * Implements hook_mail().
+ */
+function bookmark_export_mail($key, &$message, $params) {
+  switch ($key) {
+    case 'user_notification':
+      $site_name = variable_get('site_name', '');
+      $message['subject'] = 'Dine bogmærker fra det gamle ' . $site_name . ' website.';
+      $message['body'][] = $params['body'];
+      break;
   }
 }
 
